@@ -15,3 +15,4 @@ added essential libraries to lib on controller, download them from these links
  - the pico only has three analog ports, so we may need to look into alternative solutions
     - that being said, it would be entirely possible to just make our own adc, it would make for a good challenge
 
+![collaboration.md]
