@@ -6,7 +6,7 @@ please fill in what you did, with a brief description as well
 <br>
 this will make things easier later on with documentation and the development process
 
-# group members
+# Group Members
 
 ## johnny
 
@@ -20,9 +20,11 @@ this will make things easier later on with documentation and the development pro
  - documented libraries required for usb interfacing
  - developed functioning example code for usb joystick [code.py]
 
-## nathaniel
+## Nathaniel Nevarez
+ - financially assisted in purchase of parts
  - conducted research and documented requirements microcontroller needed in order to perform HID (Human Interface Device) actions
  - researched software and firmware to understand and view serial communication between microcontroller and PC
+ - opposed implementation of Arduino Nano after extensive research on its capabilitites
 
 ## tai
 
