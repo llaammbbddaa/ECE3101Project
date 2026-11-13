@@ -22,7 +22,7 @@ this will make things easier later on with documentation and the development pro
 
 ## nathaniel
  - conducted research and documented requirements microcontroller needed in order to perform HID (Human Interface Device) actions
- - 
+ - researched software and firmware to understand and view serial communication between microcontroller and PC
 
 ## tai
 
