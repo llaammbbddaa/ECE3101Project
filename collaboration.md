@@ -10,6 +10,13 @@ this will make things easier later on with documentation and the development pro
 
 ## johnny
 
+ - ordered / soldered arduino micro boards
+ - found [joystick library](https://github.com/MHeironimus/ArduinoJoystickLibrary)
+ - programmed functioning controller prototype (four buttons so far, but adding more is easy)
+ - breadboard prototype
+ - made pcb via fritzing
+
+### deprecated (pico)
  - documented libraries required for usb interfacing
  - developed functioning example code for usb joystick [code.py]
 
