@@ -21,6 +21,8 @@ this will make things easier later on with documentation and the development pro
  - developed functioning example code for usb joystick [code.py]
 
 ## nathaniel
+ - conducted research and documented requirements microcontroller needed in order to perform HID (Human Interface Device) actions
+ - 
 
 ## tai
 
