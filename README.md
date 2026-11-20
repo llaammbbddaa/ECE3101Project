@@ -14,7 +14,7 @@ for Arduino IDE, or use the bundled library with Arduino CLI.
   enables the Pro Micro's internal pull-ups.
 - Each stick header has five pads. From the square pad, the left header
   routes to GND, VCC, A1, A0, and an unconnected pad. The right header
-  routes to GND, VCC, A2, A3, and an unconnected pad.
+  routes to GND, VCC, A2, A3, and an unconnected pad. (**the unconnected switch is the joystick's button that isn't really useful**)
 - The firmware assumes the joystick module uses GND, VCC, VRx, VRy, SW in
   that order. Check the labels on your modules before installing them.
   The joystick push switches are unused.
@@ -25,17 +25,6 @@ approximately 200 ms after every reset or power-up. Startup calibration averages
 50 readings per axis; it measures center only and assumes ADC endpoints 0/1023.
 Reset with sticks released to recalibrate. Limited mechanical travel may require
 additional endpoint calibration for full-scale output.
-
-Test on Windows: Win+R > joy.cpl > select the controller > Properties > Test.
-Move each stick independently and press each button. Left stick controls X/Y;
-right controls Z/Rz. Pins 2 through 10 are A, B, X, Y, R, Z, L, Start,
-and Extra. Their zero-based HID indices are 0, 1, 3, 4, 7, 8, 6, 11,
-and 10, respectively. On Linux, Z reports as the left trigger button
-and Extra reports as Select. Hosts may number buttons differently.
-Alternatively, open https://gamepad-tester.com and press a button to activate it.
-Check that sticks settle at center with no reported drift. Axis names and game
-bindings depend on the host/game; assign Z/Rz to right-stick movement if needed.
-This is a generic USB HID gamepad; games requiring XInput may need a mapper.
 
 All pins/tuning are at the top of the sketch. Set an INVERT_AXIS entry to true
 if that axis moves in the opposite direction. The default deadzone is 5% of
@@ -90,3 +79,7 @@ The tool writes `button_mapping.json` after the last button is released.
 It records the current zero-based HID index for each label. Use the saved
 file to identify which entries in the Arduino sketch's button mapping need
 to change.
+
+### testing
+
+i would use [this website](https://hardwaretester.com/gamepad) to quickly test changes
