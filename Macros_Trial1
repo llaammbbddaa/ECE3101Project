@@ -36,14 +36,21 @@ Joystick_ Gamepad(JOYSTICK_DEFAULT_REPORT_ID, JOYSTICK_TYPE_GAMEPAD,
                  true, true, true, false, false, true,
                  false, false, false, false, false);
 
-constexpr uint8_t BUTTON_REPEAT[BUTTON_COUNT] = {1, 1, 2, 2, 1, 3, 1, 1, 1}; //Only adjust this code to change repetition count 
+constexpr uint8_t EXTRA_BUTTON = 8;
+constexpr uint16_t TAP_WINDOW_MS = 400;
 constexpr uint16_t MACRO_PRESS_MS = 60;
 constexpr uint16_t MACRO_GAP_MS = 110;
 
-bool macroActive[BUTTON_COUNT] = {};
-bool macroPressed[BUTTON_COUNT] = {};
-uint8_t macroRemaining[BUTTON_COUNT] = {};
-uint32_t macroChangedAt[BUTTON_COUNT] = {};
+uint8_t extraTapCount = 0;
+bool extraArmed = false;
+uint32_t lastExtraTapAt = 0;
+
+bool macroActive = false;
+bool macroHolding = false;
+uint8_t macroButton = 0;
+uint8_t macroRemaining = 0;
+uint32_t macroChangedAt = 0;
+
 bool reportedPressed[HID_BUTTON_COUNT] = {};
 
 uint32_t centerSum[AXIS_COUNT] = {};
@@ -75,34 +82,43 @@ int16_t mapAxis(uint16_t raw, uint16_t midpoint, bool invert) {
   return int16_t(result);
 }
 
-void startMacro(uint8_t index, uint32_t now) {
-  if (BUTTON_REPEAT[index] <= 1 || macroActive[index]) return;
+void startMacro(uint32_t now) {
+  if (macroActive || extraTapCount == 0) return;
 
-  macroActive[index] = true;
-  macroPressed[index] = true;
-  macroRemaining[index] = BUTTON_REPEAT[index];
-  macroChangedAt[index] = now;
+  if (extraTapCount == 1) {
+    macroButton = BUTTON_REPORT_INDEX[0];
+    macroRemaining = 2;
+  } else if (extraTapCount == 2) {
+    macroButton = BUTTON_REPORT_INDEX[1];
+    macroRemaining = 2;
+  } else {
+    macroButton = BUTTON_REPORT_INDEX[2];
+    macroRemaining = 3;
+  }
+
+  extraTapCount = 0;
+  macroActive = true;
+  macroHolding = true;
+  macroChangedAt = now;
 }
 
-void updateMacros(uint32_t now) {
-  for (uint8_t i = 0; i < BUTTON_COUNT; ++i) {
-    if (!macroActive[i]) continue;
+void updateMacro(uint32_t now) {
+  if (!macroActive) return;
 
-    if (macroPressed[i]) {
-      if (uint32_t(now - macroChangedAt[i]) >= MACRO_PRESS_MS) {
-        macroPressed[i] = false;
-        macroChangedAt[i] = now;
-        macroRemaining[i]--;
+  if (macroHolding) {
+    if (uint32_t(now - macroChangedAt) >= MACRO_PRESS_MS) {
+      macroHolding = false;
+      macroChangedAt = now;
+      macroRemaining--;
 
-        if (macroRemaining[i] == 0) {
-          macroActive[i] = false;
-        }
+      if (macroRemaining == 0) {
+        macroActive = false;
       }
-    } else {
-      if (uint32_t(now - macroChangedAt[i]) >= MACRO_GAP_MS) {
-        macroPressed[i] = true;
-        macroChangedAt[i] = now;
-      }
+    }
+  } else {
+    if (uint32_t(now - macroChangedAt) >= MACRO_GAP_MS) {
+      macroHolding = true;
+      macroChangedAt = now;
     }
   }
 }
@@ -112,15 +128,13 @@ bool updateButtons() {
   bool desired[HID_BUTTON_COUNT] = {};
 
   for (uint8_t i = 0; i < BUTTON_COUNT; ++i) {
-    if (BUTTON_REPEAT[i] == 1) {
-      if (stablePressed[i]) {
-        desired[BUTTON_REPORT_INDEX[i]] = true;
-      }
-    } else {
-      if (macroActive[i] && macroPressed[i]) {
-        desired[BUTTON_REPORT_INDEX[i]] = true;
-      }
+    if (i != EXTRA_BUTTON && stablePressed[i]) {
+      desired[BUTTON_REPORT_INDEX[i]] = true;
     }
+  }
+
+  if (macroActive && macroHolding) {
+    desired[macroButton] = true;
   }
 
   for (uint8_t i = 0; i < HID_BUTTON_COUNT; ++i) {
@@ -178,14 +192,30 @@ void loop() {
     if (rawPressed[i] != stablePressed[i] &&
         uint32_t(now - buttonChangedAt[i]) >= DEBOUNCE_MS) {
       stablePressed[i] = rawPressed[i];
-      if (stablePressed[i]) {
-        startMacro(i, now);
+
+      if (i == EXTRA_BUTTON) {
+        if (stablePressed[i]) {
+          if (!macroActive) extraArmed = true;
+        } else {
+          if (extraArmed && !macroActive) {
+            if (extraTapCount < 3) extraTapCount++;
+            lastExtraTapAt = now;
+          }
+          extraArmed = false;
+        }
       }
+
       changed = true;
     }
   }
 
-  updateMacros(now);
+  if (!macroActive && extraTapCount > 0 &&
+      !stablePressed[EXTRA_BUTTON] && !extraArmed &&
+      uint32_t(now - lastExtraTapAt) >= TAP_WINDOW_MS) {
+    startMacro(now);
+  }
+
+  updateMacro(now);
   if (updateButtons()) changed = true;
 
   if (!calibrated) {
