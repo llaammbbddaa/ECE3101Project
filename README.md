@@ -1,24 +1,24 @@
-Arduino Micro USB gamepad
+Pro Micro USB gamepad
 
-Open gamecube.ino in Arduino IDE (keep it in the gamecube folder).
-Install Arduino AVR Boards through
-Boards Manager if needed, then select Tools > Board > Arduino AVR Boards >
-Arduino Micro and select its USB port.
+Open gamecube.ino in Arduino IDE. Install [SparkFun AVR Boards](https://learn.sparkfun.com/tutorials/pro-micro--fio-v3-hookup-guide)
+and select SparkFun Pro Micro. Choose the processor option that matches your
+module (5 V / 16 MHz or 3.3 V / 8 MHz).
 
-Install MHeironimus's ArduinoJoystickLibrary (Joystick.h):
-https://github.com/MHeironimus/ArduinoJoystickLibrary
-Download Code > Download ZIP, then use Sketch > Include Library > Add .ZIP
-Library in Arduino IDE. Use this library rather than another similarly named
-Joystick library.
+Install MHeironimus's [ArduinoJoystickLibrary](https://github.com/MHeironimus/ArduinoJoystickLibrary)
+for Arduino IDE, or use the bundled library with Arduino CLI.
 
-Wiring:
-- Both joystick modules: VCC to Micro 5V, GND to Micro GND.
-- Left joystick VRx/wiper to A0, VRy/wiper to A1.
-- Right joystick VRx/wiper to A2, VRy/wiper to A3.
-- Each button connects its assigned pin (4, 5, 6, or 7) to GND when pressed.
-  Internal pull-ups are enabled; no external pull-up resistors are needed.
-- For bare potentiometers: outer terminals to 5V and GND, wiper to its axis pin.
-- Joystick module push-switch terminals are unused.
+### PCB connections
+
+- Switches S1 through S9 connect to D2 through D10, respectively. Each
+  normally open switch pulls its pin to ground when pressed. The firmware
+  enables the Pro Micro's internal pull-ups.
+- Each stick header has five pads. From the square pad, the left header
+  routes to GND, VCC, A1, A0, and an unconnected pad. The right header
+  routes to GND, VCC, A2, A3, and an unconnected pad.
+- The firmware assumes the joystick module uses GND, VCC, VRx, VRy, SW in
+  that order. Check the labels on your modules before installing them.
+  The joystick push switches are unused.
+- The firmware reads left X/Y from A0/A1 and right X/Y from A2/A3.
 
 Upload with sticks resting at center. Keep them untouched for the first
 approximately 200 ms after every reset or power-up. Startup calibration averages
@@ -28,10 +28,10 @@ additional endpoint calibration for full-scale output.
 
 Test on Windows: Win+R > joy.cpl > select the controller > Properties > Test.
 Move each stick independently and press each button. Left stick controls X/Y;
-right controls Z/Rz. Pins 4/5/6/7 use library button indices 0/1/4/3.
-This skips Linux BTN_C so the buttons report SOUTH/EAST/WEST/NORTH,
-normally B0/B1/B2/B3 in Chromium on Linux. Five HID button slots are exposed;
-index 2 remains released. Other hosts may show raw indices or one-based numbers.
+right controls Z/Rz. Pins 2 through 10 are A, B, X, Y, R, Z, L, Start,
+and Extra. Their zero-based HID indices are 0, 1, 3, 4, 7, 8, 6, 11,
+and 10, respectively. On Linux, Z reports as the left trigger button
+and Extra reports as Select. Hosts may number buttons differently.
 Alternatively, open https://gamepad-tester.com and press a button to activate it.
 Check that sticks settle at center with no reported drift. Axis names and game
 bindings depend on the host/game; assign Z/Rz to right-stick movement if needed.
@@ -54,16 +54,39 @@ DEBUG defaults to 0. Set it to 1 and open Serial Monitor at 115200 for occasiona
 axis/button diagnostics. It never waits for Serial; debug USB traffic can affect
 timing.
 
-Compile and flash with arduino-cli:
+### Compile and upload with Arduino CLI
+
+Install the Pro Micro board package once:
 
 ```bash
-./flash.sh                 # Detect exactly one Arduino Micro (uses python3)
-./flash.sh /dev/ttyACM0     # Or specify the port from arduino-cli board list
+arduino-cli core install SparkFun:avr --additional-urls https://raw.githubusercontent.com/sparkfun/Arduino_Boards/main/IDE_Board_Manager/package_sparkfun_index.json
 ```
 
-Install the board core first if needed: `arduino-cli core update-index`, then
-`arduino-cli core install arduino:avr`. The script uses the bundled
-`ArduinoJoystickLibrary-master` when present; otherwise install the Joystick
-library in your Arduino sketchbook. It compiles before uploading and verifies
-the flash. Keep the sticks centered during startup. Close Serial Monitor before
-uploading. Temporary build files are removed automatically.
+For a 5 V / 16 MHz Pro Micro, run this from the project directory:
+
+```bash
+arduino-cli compile --upload --fqbn SparkFun:avr:promicro:cpu=16MHzatmega32U4 --port /dev/ttyACM0 --library ArduinoJoystickLibrary-master .
+```
+
+For a 3.3 V / 8 MHz module, use `cpu=8MHzatmega32U4`. Run
+`arduino-cli board list` to check the USB port. Close Serial Monitor before
+uploading and leave both sticks centered during reset.
+
+### Capture button assignments on Linux
+
+With the gamepad connected and running the current firmware, run:
+
+```bash
+python3 configure_buttons.py
+```
+
+Press and release the button named in each prompt. The default labels are
+A, B, X, Y, L, R, Z, Start, and Extra. To capture a subset or use different
+labels, pass them in prompt order, for example
+`python3 configure_buttons.py A B X Y`. If automatic detection fails, pass
+the gamepad's event device with `--device /dev/input/eventN`.
+
+The tool writes `button_mapping.json` after the last button is released.
+It records the current zero-based HID index for each label. Use the saved
+file to identify which entries in the Arduino sketch's button mapping need
+to change.

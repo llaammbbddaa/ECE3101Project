@@ -5,14 +5,15 @@
 
 constexpr uint8_t AXIS_COUNT = 4;
 enum StickAxis : uint8_t { LEFT_X, LEFT_Y, RIGHT_X, RIGHT_Y };
-constexpr uint8_t BUTTON_COUNT = 4;
-// Physical stick wiring: left X/Y on A0/A1, right X/Y on A2/A3.
-constexpr uint8_t AXIS_PINS[AXIS_COUNT] = {A0, A1, A3, A2};
-constexpr uint8_t BUTTON_PINS[BUTTON_COUNT] = {4, 5, 6, 7};
+constexpr uint8_t BUTTON_COUNT = 9;
+// Firmware axis inputs in order: left X, left Y, right X, right Y.
+constexpr uint8_t AXIS_PINS[AXIS_COUNT] = {A0, A1, A2, A3};
+// PCB switches S1 through S9, in silkscreen order.
+constexpr uint8_t BUTTON_PINS[BUTTON_COUNT] = {2, 3, 4, 5, 6, 7, 8, 9, 10};
 // Library indices are zero-based HID usages. Skip index 2 (Linux BTN_C).
-// Pins 4/5/6/7 report SOUTH/EAST/WEST/NORTH (browser B0/B1/B2/B3).
-constexpr uint8_t BUTTON_REPORT_INDEX[BUTTON_COUNT] = {0, 1, 4, 3};
-constexpr uint8_t HID_BUTTON_COUNT = 5;  // Include index 4; index 2 stays released.
+// Pins 2–10 are labeled A, B, X, Y, R, Z, L, Start, Extra.
+constexpr uint8_t BUTTON_REPORT_INDEX[BUTTON_COUNT] = {0, 1, 3, 4, 7, 8, 6, 11, 10};
+constexpr uint8_t HID_BUTTON_COUNT = 12;  // Includes Start at index 11.
 // Order: left X, left Y, right X, right Y.
 constexpr bool INVERT_AXIS[AXIS_COUNT] = {false, true, false, false};
 constexpr uint16_t ADC_MAX = 1023;
@@ -28,7 +29,7 @@ constexpr unsigned long DEBUG_BAUD = 115200;
 static_assert(DEADZONE_PERCENT < 100, "Deadzone must be less than 100%");
 static_assert(CALIBRATION_SAMPLES > 0, "Calibration needs samples");
 
-// One gamepad, four physical buttons, five HID button slots, no hats.
+// One gamepad, nine physical buttons, twelve HID button slots, no hats.
 // Left stick uses HID X/Y; right stick uses HID Z/Rz.
 Joystick_ Gamepad(JOYSTICK_DEFAULT_REPORT_ID, JOYSTICK_TYPE_GAMEPAD,
                  HID_BUTTON_COUNT, 0,
@@ -68,7 +69,7 @@ void setup() {
 #if DEBUG
   Serial.begin(DEBUG_BAUD);
 #endif
-  analogReference(DEFAULT);  // 5 V reference with a normally powered Micro.
+  analogReference(DEFAULT);  // The joystick headers and ADC reference use VCC.
   for (uint8_t i = 0; i < AXIS_COUNT; ++i) pinMode(AXIS_PINS[i], INPUT);
   for (uint8_t i = 0; i < BUTTON_COUNT; ++i) {
     pinMode(BUTTON_PINS[i], INPUT_PULLUP);

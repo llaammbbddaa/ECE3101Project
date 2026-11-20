@@ -15,6 +15,11 @@ this will make things easier later on with documentation and the development pro
  - programmed functioning controller prototype (four buttons so far, but adding more is easy)
  - breadboard prototype
  - made pcb via fritzing
+ - soldered pcb
+ - tested pcb
+ - made program to automate controller configuration process
+ - designed controller housing
+ - adjusted code to work with nine buttons instead of four
 
 ### deprecated (pico)
  - documented libraries required for usb interfacing
