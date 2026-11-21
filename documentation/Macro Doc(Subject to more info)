@@ -1,0 +1,10 @@
+Macros
+- Some games require exceptionally precise inputs to be done in fast succession, it would be nice to add the ability to just press a button and have it perform the sequence of inputs for you.
+- Make D-pad perform some combination of movements
+  - Do we want all buttons to be designated normal inputs or do we want to have the d-pad just be for macros?
+
+Sites for help with Macros
+- https://littlebirdelectronics.com.au/projects/macro-keypad-with-atmega32u4?srsltid=AYCX9vI6rp70l8AysFwEGFNlJSOTKqI98ed2GWlOUsHd1I3LljR_8iXy
+- https://docs.arduino.cc/built-in-examples/digital/BlinkWithoutDelay/
+- https://docs.arduino.cc/built-in-examples/digital/Debounce/
+
