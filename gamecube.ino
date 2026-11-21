@@ -11,7 +11,7 @@ constexpr uint8_t AXIS_PINS[AXIS_COUNT] = {A0, A1, A2, A3};
 // PCB switches S1 through S9, in silkscreen order.
 constexpr uint8_t BUTTON_PINS[BUTTON_COUNT] = {2, 3, 4, 5, 6, 7, 8, 9, 10};
 // Library indices are zero-based HID usages. Skip index 2 (Linux BTN_C).
-// Pins 2–10 are labeled A, B, X, Y, R, Z, L, Start, Extra.
+// Pins 2-10 are labeled A, B, X, Y, R, Z, L, Start, Extra.
 constexpr uint8_t BUTTON_REPORT_INDEX[BUTTON_COUNT] = {0, 1, 3, 4, 7, 8, 6, 11, 10};
 constexpr uint8_t HID_BUTTON_COUNT = 12;  // Includes Start at index 11.
 // Order: left X, left Y, right X, right Y.
@@ -20,6 +20,13 @@ constexpr uint16_t ADC_MAX = 1023;
 constexpr int16_t AXIS_LIMIT = 32767;  // Library range: -32767 ... +32767.
 constexpr uint8_t DEADZONE_PERCENT = 5;  // 5% of each side's travel from center.
 constexpr uint16_t DEBOUNCE_MS = 8;
+
+// SNAPBACK ADDED: Protection settings
+constexpr int16_t SNAP_ARM = 18000;
+constexpr int16_t SNAP_CENTER = 5000;
+constexpr int16_t SNAP_LIMIT = 12000;
+constexpr uint16_t SNAP_TIME_MS = 25;
+
 constexpr uint16_t UPDATE_INTERVAL_MS = 1;  // Target 1000 scans/second.
 constexpr uint16_t CALIBRATION_SAMPLES = 50;
 constexpr uint16_t CALIBRATION_INTERVAL_MS = 2;
@@ -36,6 +43,7 @@ Joystick_ Gamepad(JOYSTICK_DEFAULT_REPORT_ID, JOYSTICK_TYPE_GAMEPAD,
                  true, true, true, false, false, true,
                  false, false, false, false, false);
 
+// Original variables
 uint32_t centerSum[AXIS_COUNT] = {};
 uint16_t center[AXIS_COUNT] = {};
 int16_t axisValue[AXIS_COUNT] = {};
@@ -48,6 +56,12 @@ uint32_t lastScanAt;
 uint16_t calibrationCount = 0;
 bool calibrated = false;
 bool forceReport = true;
+
+// SNAPBACK ADDED: State for each joystick axis
+int8_t snapDirection[AXIS_COUNT] = {};
+bool snapArmed[AXIS_COUNT] = {};
+bool snapWatching[AXIS_COUNT] = {};
+uint32_t snapStart[AXIS_COUNT] = {};
 
 // Rescale each half separately so the measured center maps to zero and
 // ADC endpoints still reach full scale. Remove the deadzone continuously.
@@ -63,6 +77,42 @@ int16_t mapAxis(uint16_t raw, uint16_t midpoint, bool invert) {
   if (delta < 0) result = -result;
   if (invert) result = -result;
   return int16_t(result);
+}
+
+// SNAPBACK ADDED: Detect and suppress brief joystick snapback
+int16_t protectSnapback(uint8_t axis, int16_t value, uint32_t now) {
+  if (value >= SNAP_ARM) {
+    snapDirection[axis] = 1;
+    snapArmed[axis] = true;
+    snapWatching[axis] = false;
+  }
+  else if (value <= -SNAP_ARM) {
+    snapDirection[axis] = -1;
+    snapArmed[axis] = true;
+    snapWatching[axis] = false;
+  }
+
+  if (snapArmed[axis] && abs(value) <= SNAP_CENTER) {
+    snapStart[axis] = now;
+    snapWatching[axis] = true;
+    snapArmed[axis] = false;
+  }
+
+  if (snapWatching[axis]) {
+    if (uint32_t(now - snapStart[axis]) > SNAP_TIME_MS) {
+      snapWatching[axis] = false;
+    }
+    else {
+      if ((snapDirection[axis] == 1 &&
+           value < 0 && value >= -SNAP_LIMIT) ||
+          (snapDirection[axis] == -1 &&
+           value > 0 && value <= SNAP_LIMIT)) {
+        return 0;
+      }
+    }
+  }
+
+  return value;
 }
 
 void setup() {
@@ -135,8 +185,14 @@ void loop() {
     }
   } else {
     for (uint8_t i = 0; i < AXIS_COUNT; ++i) {
-      const int16_t value = mapAxis(analogRead(AXIS_PINS[i]), center[i],
-                                    INVERT_AXIS[i]);
+
+      // SNAPBACK ADDED: Allow the axis value to be filtered
+      int16_t value = mapAxis(analogRead(AXIS_PINS[i]), center[i],
+                              INVERT_AXIS[i]);
+
+      // SNAPBACK ADDED: Apply snapback protection
+      value = protectSnapback(i, value, now);
+
       if (value != axisValue[i]) {
         axisValue[i] = value;
         changed = true;
