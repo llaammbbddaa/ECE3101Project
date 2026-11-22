@@ -36,10 +36,11 @@ Joystick_ Gamepad(JOYSTICK_DEFAULT_REPORT_ID, JOYSTICK_TYPE_GAMEPAD,
                  true, true, true, false, false, true,
                  false, false, false, false, false);
 
+//Macros 
 constexpr uint8_t EXTRA_BUTTON = 8;
-constexpr uint16_t TAP_WINDOW_MS = 400;
-constexpr uint16_t MACRO_PRESS_MS = 60;
-constexpr uint16_t MACRO_GAP_MS = 110;
+constexpr uint16_t TAP_WINDOW_MS = 250; // waits for macro presses if more than one for this long
+constexpr uint16_t MACRO_PRESS_MS = 80; // how long each button stays pressed during macro sequence
+constexpr uint16_t MACRO_GAP_MS = 200; // release time between virtual presses
 
 uint8_t extraTapCount = 0;
 bool extraArmed = false;
@@ -86,14 +87,14 @@ void startMacro(uint32_t now) {
   if (macroActive || extraTapCount == 0) return;
 
   if (extraTapCount == 1) {
-    macroButton = BUTTON_REPORT_INDEX[0];
+    macroButton = BUTTON_REPORT_INDEX[0]; // tap once, button A pressed twice
     macroRemaining = 2;
   } else if (extraTapCount == 2) {
-    macroButton = BUTTON_REPORT_INDEX[1];
+    macroButton = BUTTON_REPORT_INDEX[1]; // tap twice, button B pressed twice
     macroRemaining = 2;
   } else {
-    macroButton = BUTTON_REPORT_INDEX[2];
-    macroRemaining = 3;
+    macroButton = BUTTON_REPORT_INDEX[2]; // tap 3 times, button 'X' pressed three times
+    macroRemaining = 3; 
   }
 
   extraTapCount = 0;
@@ -275,3 +276,4 @@ void loop() {
   }
 #endif
 }
+
