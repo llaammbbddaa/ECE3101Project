@@ -34,3 +34,11 @@ this will make things easier later on with documentation and the development pro
 ## tai
 
 ## melissa
+
+- Implemented snapback protection to reduce unintended joystick movement
+- Added stick-angle correction using software-based directional notches
+- Implemented adaptive input filtering to smooth joystick readings
+- Added button double-tap detection
+- Added button long-press detection
+- Implemented button combination detection (A + B and L + R)
+- Added button sequence detection (A → B → X)
