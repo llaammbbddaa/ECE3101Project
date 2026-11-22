@@ -27,6 +27,25 @@ constexpr int16_t SNAP_CENTER = 5000;
 constexpr int16_t SNAP_LIMIT = 12000;
 constexpr uint16_t SNAP_TIME_MS = 25;
 
+// ANGLE CORRECTION ADDED: Fixed settings
+constexpr float ANGLE_TOLERANCE = 5.0;
+constexpr int16_t ANGLE_MIN_MOVEMENT = 6553;
+
+// ADAPTIVE FILTER ADDED: Filtering settings
+constexpr int16_t FILTER_FAST_THRESHOLD = 8000;
+constexpr uint8_t FILTER_SLOW_DIVISOR = 4;
+constexpr uint8_t FILTER_FAST_DIVISOR = 2;
+
+// DOUBLE-TAP ADDED: Maximum time between presses
+constexpr uint16_t DOUBLE_TAP_MS = 250;
+
+// LONG-PRESS ADDED: Minimum hold duration
+constexpr uint16_t LONG_PRESS_MS = 500;
+
+// BUTTON SEQUENCE ADDED: Sequence settings
+constexpr uint16_t SEQUENCE_TIMEOUT_MS = 500;
+constexpr uint8_t BUTTON_SEQUENCE[3] = {0, 1, 2};
+
 constexpr uint16_t UPDATE_INTERVAL_MS = 1;  // Target 1000 scans/second.
 constexpr uint16_t CALIBRATION_SAMPLES = 50;
 constexpr uint16_t CALIBRATION_INTERVAL_MS = 2;
@@ -62,6 +81,28 @@ int8_t snapDirection[AXIS_COUNT] = {};
 bool snapArmed[AXIS_COUNT] = {};
 bool snapWatching[AXIS_COUNT] = {};
 uint32_t snapStart[AXIS_COUNT] = {};
+
+// ADAPTIVE FILTER ADDED: Previous filtered values
+int32_t filteredAxis[AXIS_COUNT] = {};
+bool filterReady[AXIS_COUNT] = {};
+
+// DOUBLE-TAP ADDED: Button press tracking
+uint32_t lastPressAt[BUTTON_COUNT] = {};
+bool previousPress[BUTTON_COUNT] = {};
+bool doubleTapDetected[BUTTON_COUNT] = {};
+
+// LONG-PRESS ADDED: Button hold tracking
+uint32_t pressStartedAt[BUTTON_COUNT] = {};
+bool longPressDetected[BUTTON_COUNT] = {};
+
+// BUTTON COMBINATION ADDED: Combination states
+bool combinationAB = false;
+bool combinationLR = false;
+
+// BUTTON SEQUENCE ADDED: Sequence tracking
+uint8_t sequenceStep = 0;
+uint32_t lastSequenceAt = 0;
+bool sequenceDetected = false;
 
 // Rescale each half separately so the measured center maps to zero and
 // ADC endpoints still reach full scale. Remove the deadzone continuously.
@@ -115,6 +156,74 @@ int16_t protectSnapback(uint8_t axis, int16_t value, uint32_t now) {
   return value;
 }
 
+// ANGLE CORRECTION ADDED: Correct angles near 45-degree increments
+void correctStickAngle(int16_t &x, int16_t &y) {
+  const float magnitude = sqrt(float(x) * x + float(y) * y);
+
+  if (magnitude < ANGLE_MIN_MOVEMENT) return;
+
+  float angle = atan2(float(y), float(x)) * 180.0 / PI;
+  if (angle < 0) angle += 360.0;
+
+  const float target = round(angle / 45.0) * 45.0;
+  const float difference = abs(angle - target);
+
+  if (difference <= ANGLE_TOLERANCE) {
+    const float radians = target * PI / 180.0;
+
+    x = constrain(int32_t(round(magnitude * cos(radians))),
+                  -int32_t(AXIS_LIMIT), int32_t(AXIS_LIMIT));
+
+    y = constrain(int32_t(round(magnitude * sin(radians))),
+                  -int32_t(AXIS_LIMIT), int32_t(AXIS_LIMIT));
+  }
+}
+
+// ADAPTIVE FILTER ADDED: Smooth small changes more than large changes
+int16_t adaptiveFilter(uint8_t axis, int16_t value) {
+  if (!filterReady[axis]) {
+    filteredAxis[axis] = int32_t(value) * 256;
+    filterReady[axis] = true;
+    return value;
+  }
+
+  const int32_t target = int32_t(value) * 256;
+  const int32_t difference = target - filteredAxis[axis];
+
+  const uint8_t divisor =
+      (abs(difference) >= int32_t(FILTER_FAST_THRESHOLD) * 256)
+      ? FILTER_FAST_DIVISOR
+      : FILTER_SLOW_DIVISOR;
+
+  filteredAxis[axis] += difference / divisor;
+
+  return int16_t(constrain(filteredAxis[axis] / 256,
+                           -int32_t(AXIS_LIMIT),
+                           int32_t(AXIS_LIMIT)));
+}
+
+// BUTTON SEQUENCE ADDED: Detect A, B, X in order
+void detectButtonSequence(uint8_t button, uint32_t now) {
+  if (sequenceStep > 0 &&
+      uint32_t(now - lastSequenceAt) > SEQUENCE_TIMEOUT_MS) {
+    sequenceStep = 0;
+  }
+
+  if (button == BUTTON_SEQUENCE[sequenceStep]) {
+    sequenceStep++;
+    lastSequenceAt = now;
+
+    if (sequenceStep == 3) {
+      sequenceDetected = true;
+      sequenceStep = 0;
+    }
+  }
+  else {
+    sequenceStep = (button == BUTTON_SEQUENCE[0]) ? 1 : 0;
+    if (sequenceStep == 1) lastSequenceAt = now;
+  }
+}
+
 void setup() {
 #if DEBUG
   Serial.begin(DEBUG_BAUD);
@@ -150,6 +259,12 @@ void loop() {
   lastScanAt = now;  // Skip missed ticks; do not send bursts to catch up.
   bool changed = forceReport;
 
+  // BUTTON SEQUENCE ADDED: Expire incomplete sequences
+  if (sequenceStep > 0 &&
+      uint32_t(now - lastSequenceAt) > SEQUENCE_TIMEOUT_MS) {
+    sequenceStep = 0;
+  }
+
   for (uint8_t i = 0; i < BUTTON_COUNT; ++i) {
     const bool pressed = (digitalRead(BUTTON_PINS[i]) == LOW);
     if (pressed != rawPressed[i]) {
@@ -161,8 +276,35 @@ void loop() {
       stablePressed[i] = rawPressed[i];
       Gamepad.setButton(BUTTON_REPORT_INDEX[i], stablePressed[i]);
       changed = true;
+
+      // DOUBLE-TAP ADDED: Detect a second press
+      if (stablePressed[i]) {
+        doubleTapDetected[i] =
+            previousPress[i] &&
+            uint32_t(now - lastPressAt[i]) <= DOUBLE_TAP_MS;
+
+        lastPressAt[i] = now;
+        previousPress[i] = true;
+
+        // LONG-PRESS ADDED: Start tracking a new hold
+        pressStartedAt[i] = now;
+        longPressDetected[i] = false;
+
+        // BUTTON SEQUENCE ADDED: Process the new press
+        detectButtonSequence(i, now);
+      }
+    }
+
+    // LONG-PRESS ADDED: Detect a continuous hold
+    if (stablePressed[i] && !longPressDetected[i] &&
+        uint32_t(now - pressStartedAt[i]) >= LONG_PRESS_MS) {
+      longPressDetected[i] = true;
     }
   }
+
+  // BUTTON COMBINATION ADDED: Detect simultaneous buttons
+  combinationAB = stablePressed[0] && stablePressed[1];
+  combinationLR = stablePressed[6] && stablePressed[4];
 
   if (!calibrated) {
     // Leave both sticks untouched for approximately the first 200 ms.
@@ -184,6 +326,10 @@ void loop() {
       }
     }
   } else {
+
+    // ANGLE CORRECTION ADDED: Store new axis readings before correction
+    int16_t newAxis[AXIS_COUNT];
+
     for (uint8_t i = 0; i < AXIS_COUNT; ++i) {
 
       // SNAPBACK ADDED: Allow the axis value to be filtered
@@ -193,8 +339,21 @@ void loop() {
       // SNAPBACK ADDED: Apply snapback protection
       value = protectSnapback(i, value, now);
 
-      if (value != axisValue[i]) {
-        axisValue[i] = value;
+      // ADAPTIVE FILTER ADDED: Smooth joystick readings
+      value = adaptiveFilter(i, value);
+
+      // ANGLE CORRECTION ADDED
+      newAxis[i] = value;
+    }
+
+    // ANGLE CORRECTION ADDED: Correct both joysticks
+    correctStickAngle(newAxis[LEFT_X], newAxis[LEFT_Y]);
+    correctStickAngle(newAxis[RIGHT_X], newAxis[RIGHT_Y]);
+
+    // ANGLE CORRECTION ADDED: Update final corrected values
+    for (uint8_t i = 0; i < AXIS_COUNT; ++i) {
+      if (newAxis[i] != axisValue[i]) {
+        axisValue[i] = newAxis[i];
         changed = true;
       }
     }
