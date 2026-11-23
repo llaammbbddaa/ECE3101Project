@@ -83,3 +83,7 @@ to change.
 ### testing
 
 i would use [this website](https://hardwaretester.com/gamepad) to quickly test changes
+
+### macros
+
+currently, just as a method of showing off during testing, waveshining is what is loaded as the macro
