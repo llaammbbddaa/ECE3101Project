@@ -19,7 +19,7 @@ constexpr bool INVERT_AXIS[AXIS_COUNT] = {false, true, true, false};
 constexpr uint16_t ADC_MAX = 1023;
 constexpr int16_t AXIS_LIMIT = 32767;  // Library range: -32767 ... +32767.
 constexpr uint8_t DEADZONE_PERCENT = 5;  // 5% of each side's travel from center.
-constexpr uint16_t DEBOUNCE_MS = 8;
+constexpr uint16_t DEBOUNCE_MS = 8;  // lockout after each edge (not a press delay)
 
 // SNAPBACK ADDED: Protection settings
 constexpr int16_t SNAP_ARM = 18000;
@@ -70,9 +70,8 @@ Joystick_ Gamepad(JOYSTICK_DEFAULT_REPORT_ID, JOYSTICK_TYPE_GAMEPAD,
 uint32_t centerSum[AXIS_COUNT] = {};
 uint16_t center[AXIS_COUNT] = {};
 int16_t axisValue[AXIS_COUNT] = {};
-bool rawPressed[BUTTON_COUNT] = {};
 bool stablePressed[BUTTON_COUNT] = {};
-uint32_t buttonChangedAt[BUTTON_COUNT] = {};
+uint32_t buttonChangedAt[BUTTON_COUNT] = {};  // time of last accepted edge
 uint32_t startupAt;
 uint32_t lastCalibrationAt;
 uint32_t lastScanAt;
@@ -201,8 +200,8 @@ void setup() {
   for (uint8_t i = 0; i < AXIS_COUNT; ++i) pinMode(AXIS_PINS[i], INPUT);
   for (uint8_t i = 0; i < BUTTON_COUNT; ++i) {
     pinMode(BUTTON_PINS[i], INPUT_PULLUP);
-    rawPressed[i] = (digitalRead(BUTTON_PINS[i]) == LOW);
-    // stablePressed starts released; even a held startup button is debounced.
+    // stablePressed starts released; a button held at startup is reported
+    // after the first lockout window.
   }
 
   Gamepad.setXAxisRange(-AXIS_LIMIT, AXIS_LIMIT);
@@ -228,22 +227,20 @@ void loop() {
   lastScanAt = now;  // Skip missed ticks; do not send bursts to catch up.
   bool changed = forceReport;
 
+  // Eager (leading-edge) debounce: report a press/release on the FIRST scan
+  // that sees it, then ignore the pin for DEBOUNCE_MS while the contacts
+  // bounce. Zero added latency, unlike waiting DEBOUNCE_MS for a stable level.
   for (uint8_t i = 0; i < BUTTON_COUNT; ++i) {
+    if (uint32_t(now - buttonChangedAt[i]) < DEBOUNCE_MS) continue;  // lockout
     const bool pressed = (digitalRead(BUTTON_PINS[i]) == LOW);
-    if (pressed != rawPressed[i]) {
-      rawPressed[i] = pressed;
-      buttonChangedAt[i] = now;
-    }
-    if (rawPressed[i] != stablePressed[i] &&
-        uint32_t(now - buttonChangedAt[i]) >= DEBOUNCE_MS) {
-      stablePressed[i] = rawPressed[i];
+    if (pressed != stablePressed[i]) {
+      stablePressed[i] = pressed;
+      buttonChangedAt[i] = now;  // start lockout window
       if (!macroOwnsButton(i)) {
         Gamepad.setButton(BUTTON_REPORT_INDEX[i], stablePressed[i]);
       }
       changed = true;
-
     }
-
   }
 
   if (!calibrated) {
